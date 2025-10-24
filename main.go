@@ -225,11 +225,25 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch options chain data
 	allExpirationDates := yfTicker.ExpirationDates()
-	if len(allExpirationDates) == 0 {
+
+	var adjustedExpirationDates []string
+	for _, expDateStr := range allExpirationDates {
+		expiryTime, err := time.Parse("2006-01-02", expDateStr)
+		if err != nil {
+			log.Printf("Error parsing expiration date %s: %v", expDateStr, err)
+			continue
+		}
+		if expiryTime.Weekday() == time.Thursday {
+			expiryTime = expiryTime.Add(24 * time.Hour) // Adjust to Friday
+		}
+		adjustedExpirationDates = append(adjustedExpirationDates, expiryTime.Format("2006-01-02"))
+	}
+
+	if len(adjustedExpirationDates) == 0 {
 		log.Printf("No expiration dates found for ticker: %s", ticker)
 	} else {
-		log.Printf("Found %d expiration dates for ticker: %s", len(allExpirationDates), ticker)
-		consolidatedData.ExpirationDates = allExpirationDates
+		log.Printf("Found %d adjusted expiration dates for ticker: %s", len(adjustedExpirationDates), ticker)
+		consolidatedData.ExpirationDates = adjustedExpirationDates
 	}
 
 	// Check for a specific expiration date from query parameter
@@ -239,13 +253,17 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 	var expiryDateToUse time.Time
 
 	if selectedExpirationDate != "" {
-		// Use the selected expiration date
+		// Use the selected expiration date (after potential adjustment)
 		expTime, err := time.Parse("2006-01-02", selectedExpirationDate)
 		if err != nil {
 			log.Printf("Error parsing selected expiration date %s: %v", selectedExpirationDate, err)
 			// Fallback to nearest expiry if selected date is invalid
 			selectedExpirationDate = ""
 		} else {
+			if expTime.Weekday() == time.Thursday {
+				expTime = expTime.Add(24 * time.Hour) // Adjust to Friday
+				selectedExpirationDate = expTime.Format("2006-01-02")
+			}
 			tempOptionData := yfTicker.OptionChainByExpiration(selectedExpirationDate)
 			optionDataToUse = &tempOptionData
 			expiryDateToUse = expTime
@@ -259,7 +277,7 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 		var nearestFridayExpiry time.Time
 		var nearestFridayExpiryStr string
 
-		for _, expDateStr := range allExpirationDates {
+		for _, expDateStr := range adjustedExpirationDates {
 			expiryTime, err := time.Parse("2006-01-02", expDateStr)
 			if err != nil {
 				log.Printf("Error parsing expiration date %s: %v", expDateStr, err)
@@ -284,7 +302,7 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			// Fallback to finding the overall nearest future expiration date if no Friday expiry is found
 			var nearestExpiry time.Time
-			for _, expDateStr := range allExpirationDates {
+			for _, expDateStr := range adjustedExpirationDates {
 				expiryTime, err := time.Parse("2006-01-02", expDateStr)
 				if err != nil {
 					log.Printf("Error parsing expiration date %s: %v", expDateStr, err)
