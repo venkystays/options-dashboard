@@ -7,7 +7,6 @@ import (
 	"math"
 	"net/http"
 	"sort"
-	"strconv"
 	"os"
 	"strings"
 	"time"
@@ -28,15 +27,6 @@ type OptionsData struct {
 	ExpirationDates     []string `json:"expirationDates"`
 }
 
-type StrikePriceData struct {
-	StrikePrices []float64 `json:"strikePrices"`
-}
-
-type WeeklyRsiData struct {
-	Timestamps []string  `json:"timestamps"`
-	RsiValues  []float64 `json:"rsiValues"`
-}
-
 func main() {
 	// Get the current working directory
 	dir, err := os.Getwd()
@@ -51,10 +41,8 @@ func main() {
 
 	// Handle API requests
 	http.HandleFunc("/api/options/", enableCORS(optionsHandler))
-	http.HandleFunc("/api/strikes/", enableCORS(strikePriceHandler))
-	http.HandleFunc("/api/rsi/weekly/", enableCORS(weeklyRsiHandler))
 
-	fmt.Println("Server listening on port 8081...")
+	fmt.Println("Server listening on port 8080...")
 	log.Fatal(http.ListenAndServe(":8081", nil))
 }
 
@@ -373,109 +361,6 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 		consolidatedData.ImpliedVolatility = "N/A (no options data for selected/nearest expiry)"
 	}
 
-	selectedStrike := r.URL.Query().Get("strikePrice")
-	if selectedStrike != "" && optionDataToUse != nil {
-		strike, err := strconv.ParseFloat(selectedStrike, 64)
-		if err == nil {
-			var callIV, putIV float64
-			var callOI, putOI int64
-			var callFound, putFound bool
-			for _, call := range optionDataToUse.Calls {
-				if call.Strike == strike {
-					callIV = call.ImpliedVolatility
-					callOI = call.OpenInterest
-					callFound = true
-					break
-				}
-			}
-			for _, put := range optionDataToUse.Puts {
-				if put.Strike == strike {
-					putIV = put.ImpliedVolatility
-					putOI = put.OpenInterest
-					putFound = true
-					break
-				}
-			}
-
-			if callFound || putFound {
-				avgIV := (callIV + putIV) / 2
-				consolidatedData.ImpliedVolatility = fmt.Sprintf("%.2f%%", avgIV*100)
-			}
-
-			if callOI > 0 {
-				pcr := float64(putOI) / float64(callOI)
-				consolidatedData.PutCallRatio = fmt.Sprintf("%.2f", pcr)
-			}
-		}
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(consolidatedData)
-}
-
-func strikePriceHandler(w http.ResponseWriter, r *http.Request) {
-	ticker := strings.TrimPrefix(r.URL.Path, "/api/strikes/")
-	expirationDate := r.URL.Query().Get("expirationDate")
-
-	if ticker == "" || expirationDate == "" {
-		http.Error(w, "Ticker and expirationDate are required", http.StatusBadRequest)
-		return
-	}
-
-	yfTicker := yahoofinanceapi.NewTicker(ticker)
-	optionData := yfTicker.OptionChainByExpiration(expirationDate)
-
-	var strikePrices []float64
-	for _, call := range optionData.Calls {
-		strikePrices = append(strikePrices, call.Strike)
-	}
-
-	sort.Float64s(strikePrices)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(StrikePriceData{StrikePrices: strikePrices})
-}
-
-func weeklyRsiHandler(w http.ResponseWriter, r *http.Request) {
-	ticker := strings.TrimPrefix(r.URL.Path, "/api/rsi/weekly/")
-	if ticker == "" {
-		http.Error(w, "Ticker symbol is required", http.StatusBadRequest)
-		return
-	}
-
-	yfTicker := yahoofinanceapi.NewTicker(ticker)
-	historicalData, err := yfTicker.History(yahoofinanceapi.HistoryQuery{Interval: "1wk", Range: "3mo"})
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error fetching weekly historical data: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	var timestamps []string
-	var rsiValues []float64
-	var closingPrices []float64
-
-	type PriceEntry struct {
-		Date  time.Time
-		Close float64
-	}
-	var priceEntries []PriceEntry
-	for dateStr, data := range historicalData {
-		date, _ := time.Parse("2006-01-02", dateStr)
-		priceEntries = append(priceEntries, PriceEntry{Date: date, Close: data.Close})
-	}
-	sort.Slice(priceEntries, func(i, j int) bool { return priceEntries[i].Date.Before(priceEntries[j].Date) })
-
-	for _, entry := range priceEntries {
-		closingPrices = append(closingPrices, entry.Close)
-		timestamps = append(timestamps, entry.Date.Format("2006-01-02"))
-		if len(closingPrices) >= 14 {
-			rsi := calculateRSI(closingPrices, 14)
-			rsiValues = append(rsiValues, rsi)
-		} else {
-			rsiValues = append(rsiValues, 0) // Not enough data
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(WeeklyRsiData{Timestamps: timestamps, RsiValues: rsiValues})
 }
