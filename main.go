@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"os"
 	"strings"
 	"time"
 
@@ -26,6 +27,13 @@ type OptionsData struct {
 }
 
 func main() {
+	// Get the current working directory
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Current working directory:", dir)
+
 	// Serve static files from the current directory
 	fs := http.FileServer(http.Dir("."))
 	http.Handle("/", fs)
@@ -34,7 +42,7 @@ func main() {
 	http.HandleFunc("/api/options/", enableCORS(optionsHandler))
 
 	fmt.Println("Server listening on port 8080...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8081", nil))
 }
 
 func enableCORS(next http.HandlerFunc) http.HandlerFunc {

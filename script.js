@@ -8,21 +8,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const hvValue = document.getElementById('hvValue');
     const tickerInput = document.getElementById('tickerInput');
     const fetchButton = document.getElementById('fetchButton');
+    const themeSwitch = document.getElementById('theme-switch');
+    const loadingOverlay = document.getElementById('loadingOverlay');
 
     const showLoading = (isLoading) => {
         if (isLoading) {
-            stockNameDisplay.textContent = 'Fetching...';
-            currentPriceDisplay.textContent = '...';
-            rsiValue.textContent = '...';
-            pcrValue.textContent = '...';
-            ivValue.textContent = '...';
-            rvValue.textContent = '...';
-            hvValue.textContent = '...';
-            fetchButton.disabled = true;
-            fetchButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Fetching...';
+            loadingOverlay.classList.add('show');
         } else {
-            fetchButton.disabled = false;
-            fetchButton.innerHTML = 'Get Insights';
+            loadingOverlay.classList.remove('show');
         }
     };
 
@@ -30,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoading(true);
 
         try {
-            const response = await fetch(`http://localhost:8080/api/options/${ticker}`);
+            const response = await fetch(`http://localhost:8081/api/options/${ticker}`);
             const data = await response.json();
 
             if (response.ok) {
@@ -63,6 +56,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const ticker = tickerInput.value.trim().toUpperCase();
         if (ticker) {
             fetchData(ticker);
+        }
+    });
+
+    themeSwitch.addEventListener('change', () => {
+        if (themeSwitch.checked) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+        } else {
+            document.documentElement.removeAttribute('data-theme');
         }
     });
 
