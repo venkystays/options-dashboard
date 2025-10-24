@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const fetchButton = document.getElementById('fetchButton');
     const themeSwitch = document.getElementById('theme-switch');
     const loadingOverlay = document.getElementById('loadingOverlay');
+    const expirationDateDropdown = document.getElementById('expirationDateDropdown');
+
+    let currentTicker = 'AAPL'; // Default ticker
 
     const showLoading = (isLoading) => {
         if (isLoading) {
@@ -19,21 +22,58 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const fetchData = async (ticker) => {
+    const populateExpirationDates = (dates, selectedDate = null) => {
+        expirationDateDropdown.innerHTML = ''; // Clear previous options
+        if (dates && dates.length > 0) {
+            dates.forEach(date => {
+                const option = document.createElement('option');
+                option.value = date;
+                option.textContent = date;
+                expirationDateDropdown.appendChild(option);
+            });
+            // Select the provided date or the first one
+            if (selectedDate && dates.includes(selectedDate)) {
+                expirationDateDropdown.value = selectedDate;
+            } else {
+                expirationDateDropdown.value = dates[0];
+            }
+            expirationDateDropdown.style.display = 'block';
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No expiration dates available';
+            expirationDateDropdown.appendChild(option);
+            expirationDateDropdown.style.display = 'none';
+        }
+    };
+
+    const fetchData = async (ticker, expirationDate = null) => {
         showLoading(true);
+        currentTicker = ticker; // Update current ticker
+
+        let url = `http://localhost:8081/api/options/${ticker}`;
+        if (expirationDate) {
+            url += `?expirationDate=${expirationDate}`;
+        }
 
         try {
-            const response = await fetch(`http://localhost:8081/api/options/${ticker}`);
+            const response = await fetch(url);
             const data = await response.json();
 
             if (response.ok) {
                 stockNameDisplay.textContent = data.companyName || 'N/A';
-                currentPriceDisplay.textContent = data.currentPrice ? `$${data.currentPrice}` : 'N/A';
+                currentPriceDisplay.textContent = data.currentPrice ? `${data.currentPrice}` : 'N/A';
                 rsiValue.textContent = data.rsi || 'N/A';
                 pcrValue.textContent = data.putCallRatio || 'N/A';
                 ivValue.textContent = data.impliedVolatility || 'N/A';
                 rvValue.textContent = data.realizedVolatility || 'N/A';
                 hvValue.textContent = data.historicVolatility || 'N/A';
+
+                // Populate expiration dates dropdown only if not already populated for a specific date fetch
+                if (!expirationDate) {
+                    populateExpirationDates(data.expirationDates);
+                }
+
             } else {
                 throw new Error(data.error || 'Unknown error from backend');
             }
@@ -47,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ivValue.textContent = 'N/A';
             rvValue.textContent = 'N/A';
             hvValue.textContent = 'N/A';
+            populateExpirationDates([]); // Clear dropdown on error
         } finally {
             showLoading(false);
         }
@@ -59,6 +100,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    expirationDateDropdown.addEventListener('change', () => {
+        const selectedDate = expirationDateDropdown.value;
+        if (currentTicker && selectedDate) {
+            fetchData(currentTicker, selectedDate);
+        }
+    });
+
     themeSwitch.addEventListener('change', () => {
         if (themeSwitch.checked) {
             document.documentElement.setAttribute('data-theme', 'dark');
@@ -67,6 +115,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Fetch data for a default ticker on page load
-    fetchData('AAPL');
+    // Initial fetch for default ticker on page load
+    fetchData(currentTicker);
 });

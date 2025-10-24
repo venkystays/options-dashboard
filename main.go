@@ -24,6 +24,7 @@ type OptionsData struct {
 	ImpliedVolatility   string `json:"impliedVolatility"`
 	RealizedVolatility  string `json:"realizedVolatility"`
 	HistoricVolatility  string `json:"historicVolatility"`
+	ExpirationDates     []string `json:"expirationDates"`
 }
 
 func main() {
@@ -223,60 +224,85 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch options chain data
-	expirationDates := yfTicker.ExpirationDates()
-	if len(expirationDates) == 0 {
+	allExpirationDates := yfTicker.ExpirationDates()
+	if len(allExpirationDates) == 0 {
 		log.Printf("No expiration dates found for ticker: %s", ticker)
 	} else {
-		log.Printf("Found %d expiration dates for ticker: %s", len(expirationDates), ticker)
+		log.Printf("Found %d expiration dates for ticker: %s", len(allExpirationDates), ticker)
+		consolidatedData.ExpirationDates = allExpirationDates
 	}
 
-	var currentWeekOptionData *yahoofinanceapi.OptionData
-	var nearestExpiry time.Time
-	now := time.Now()
+	// Check for a specific expiration date from query parameter
+	selectedExpirationDate := r.URL.Query().Get("expirationDate")
 
-	// Find the nearest expiration date (current week)
-	for _, expDateStr := range expirationDates {
-		expiryTime, err := time.Parse("2006-01-02", expDateStr)
+	var optionDataToUse *yahoofinanceapi.OptionData
+	var expiryDateToUse time.Time
+
+	if selectedExpirationDate != "" {
+		// Use the selected expiration date
+		expTime, err := time.Parse("2006-01-02", selectedExpirationDate)
 		if err != nil {
-			log.Printf("Error parsing expiration date %s: %v", expDateStr, err)
-			continue
+			log.Printf("Error parsing selected expiration date %s: %v", selectedExpirationDate, err)
+			// Fallback to nearest expiry if selected date is invalid
+			selectedExpirationDate = ""
+		} else {
+			tempOptionData := yfTicker.OptionChainByExpiration(selectedExpirationDate)
+			optionDataToUse = &tempOptionData
+			expiryDateToUse = expTime
+			log.Printf("Using selected expiration date %s for ticker %s", selectedExpirationDate, ticker)
 		}
+	}
 
-		// Consider only future expirations
-		if expiryTime.After(now) {
-			if currentWeekOptionData == nil || expiryTime.Before(nearestExpiry) {
-				nearestExpiry = expiryTime
-				tempOptionData := yfTicker.OptionChainByExpiration(expDateStr)
-				currentWeekOptionData = &tempOptionData
-				log.Printf("Fetched option chain for nearest expiry %s for ticker %s", expDateStr, ticker)
+	if selectedExpirationDate == "" {
+		// Find the nearest expiration date if none selected or invalid
+		now := time.Now()
+		var nearestExpiry time.Time
+		for _, expDateStr := range allExpirationDates {
+			expiryTime, err := time.Parse("2006-01-02", expDateStr)
+			if err != nil {
+				log.Printf("Error parsing expiration date %s: %v", expDateStr, err)
+				continue
+			}
+
+			// Consider only future expirations
+			if expiryTime.After(now) {
+				if optionDataToUse == nil || expiryTime.Before(nearestExpiry) {
+					nearestExpiry = expiryTime
+					tempOptionData := yfTicker.OptionChainByExpiration(expDateStr)
+					optionDataToUse = &tempOptionData
+					expiryDateToUse = expiryTime
+				}
 			}
 		}
+		if optionDataToUse != nil {
+			log.Printf("Using nearest expiration date %s for ticker %s", expiryDateToUse.Format("2006-01-02"), ticker)
+		}
 	}
 
-	// Calculate Put/Call Ratio for the current week
-	if currentWeekOptionData != nil {
-		var currentWeekPutsOI int64
-		var currentWeekCallsOI int64
+	// Calculate Put/Call Ratio for the current week (or selected expiry)
+	if optionDataToUse != nil {
+		var putsOI int64
+		var callsOI int64
 
-		for _, call := range currentWeekOptionData.Calls {
-			currentWeekCallsOI += call.OpenInterest
+		for _, call := range optionDataToUse.Calls {
+			callsOI += call.OpenInterest
 		}
-		for _, put := range currentWeekOptionData.Puts {
-			currentWeekPutsOI += put.OpenInterest
+		for _, put := range optionDataToUse.Puts {
+			putsOI += put.OpenInterest
 		}
-		log.Printf("For ticker %s, nearest expiry: %s, Calls OI: %d, Puts OI: %d", ticker, nearestExpiry.Format("2006-01-02"), currentWeekCallsOI, currentWeekPutsOI)
+		log.Printf("For ticker %s, expiry %s, Calls OI: %d, Puts OI: %d", ticker, expiryDateToUse.Format("2006-01-02"), callsOI, putsOI)
 
-		if currentWeekCallsOI > 0 {
-			putCallRatio := float64(currentWeekPutsOI) / float64(currentWeekCallsOI)
+		if callsOI > 0 {
+			putCallRatio := float64(putsOI) / float64(callsOI)
 			consolidatedData.PutCallRatio = fmt.Sprintf("%.2f", putCallRatio)
 		} else {
-			consolidatedData.PutCallRatio = "N/A (no call open interest for current week)"
+			consolidatedData.PutCallRatio = "N/A (no call open interest for selected expiry)"
 		}
 
-		// Set Implied Volatility for the current week
-		if len(currentWeekOptionData.Calls) > 0 {
-			if currentWeekOptionData.Calls[0].ImpliedVolatility != 0 {
-				consolidatedData.ImpliedVolatility = fmt.Sprintf("%.2f%%", currentWeekOptionData.Calls[0].ImpliedVolatility*100)
+		// Set Implied Volatility for the current week (or selected expiry)
+		if len(optionDataToUse.Calls) > 0 {
+			if optionDataToUse.Calls[0].ImpliedVolatility != 0 {
+				consolidatedData.ImpliedVolatility = fmt.Sprintf("%.2f%%", optionDataToUse.Calls[0].ImpliedVolatility*100)
 			} else {
 				consolidatedData.ImpliedVolatility = "N/A"
 			}
@@ -285,8 +311,8 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 	} else {
-		consolidatedData.PutCallRatio = "N/A (no current week options data)"
-		consolidatedData.ImpliedVolatility = "N/A (no current week options data)"
+		consolidatedData.PutCallRatio = "N/A (no options data for selected/nearest expiry)"
+		consolidatedData.ImpliedVolatility = "N/A (no options data for selected/nearest expiry)"
 	}
 
 	w.Header().Set("Content-Type", "application/json")

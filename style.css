@@ -124,6 +124,36 @@ h1 {
     transform: translateY(-2px);
 }
 
+.expiration-date-selection {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    gap: 10px;
+}
+
+.expiration-date-selection label {
+    font-size: 1rem;
+    color: var(--text-color);
+}
+
+.expiration-date-selection select {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 1rem;
+    background-color: var(--card-background);
+    color: var(--text-color);
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.expiration-date-selection select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    outline: none;
+}
+
 .stock-info {
     text-align: center;
     font-size: 1.2rem;
