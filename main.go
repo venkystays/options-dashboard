@@ -224,6 +224,11 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch options chain data
 	expirationDates := yfTicker.ExpirationDates()
+	if len(expirationDates) == 0 {
+		log.Printf("No expiration dates found for ticker: %s", ticker)
+	} else {
+		log.Printf("Found %d expiration dates for ticker: %s", len(expirationDates), ticker)
+	}
 
 	var currentWeekOptionData *yahoofinanceapi.OptionData
 	var nearestExpiry time.Time
@@ -243,6 +248,7 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 				nearestExpiry = expiryTime
 				tempOptionData := yfTicker.OptionChainByExpiration(expDateStr)
 				currentWeekOptionData = &tempOptionData
+				log.Printf("Fetched option chain for nearest expiry %s for ticker %s", expDateStr, ticker)
 			}
 		}
 	}
@@ -258,6 +264,7 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 		for _, put := range currentWeekOptionData.Puts {
 			currentWeekPutsOI += put.OpenInterest
 		}
+		log.Printf("For ticker %s, nearest expiry: %s, Calls OI: %d, Puts OI: %d", ticker, nearestExpiry.Format("2006-01-02"), currentWeekCallsOI, currentWeekPutsOI)
 
 		if currentWeekCallsOI > 0 {
 			putCallRatio := float64(currentWeekPutsOI) / float64(currentWeekCallsOI)

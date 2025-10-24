@@ -14,7 +14,7 @@ This project is a web-based stock options dashboard that provides key metrics fo
     ```bash
     go run main.go
     ```
-    The server will start on port 8080.
+    The server will start on port 8081.
 
 2.  **Open the frontend:**
     Open `index.html` in your web browser. The page will automatically fetch and display the options data for the hardcoded ticker 'BAC'.
