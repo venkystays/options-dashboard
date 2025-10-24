@@ -231,3 +231,31 @@ h1 {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+.strike-price-selection, .chart-container {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+}
+
+#rsiStatus {
+    font-size: 1rem;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 8px;
+    color: white;
+}
+
+.status-overbought {
+    background-color: #dc3545; /* Red */
+}
+
+.status-oversold {
+    background-color: #28a745; /* Green */
+}
+
+.status-neutral {
+    background-color: #6c757d; /* Gray */
+}

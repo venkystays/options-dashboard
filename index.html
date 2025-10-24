@@ -30,6 +30,10 @@
             <label for="expirationDateDropdown">Select Expiration Date:</label>
             <select id="expirationDateDropdown" class="form-select"></select>
         </div>
+        <div class="strike-price-selection" id="strikePriceSelection" style="display: none;">
+            <label for="strikePriceDropdown">Select Strike Price:</label>
+            <select id="strikePriceDropdown" class="form-select"></select>
+        </div>
         <p id="stockName" class="stock-info"></p>
         <div class="data-section">
             <div class="data-card">
@@ -38,7 +42,7 @@
             </div>
             <div class="data-card">
                 <h2>RSI</h2>
-                <p id="rsiValue">N/A</p>
+                <p><span id="rsiValueText">N/A</span> <span id="rsiStatus"></span></p>
             </div>
             <div class="data-card">
                 <h2>Put/Call Ratio</h2>
@@ -57,7 +61,11 @@
                 <p id="hvValue">N/A</p>
             </div>
         </div>
+        <div class="chart-container">
+            <canvas id="rsiChart"></canvas>
+        </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
