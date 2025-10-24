@@ -254,9 +254,11 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if selectedExpirationDate == "" {
-		// Find the nearest expiration date if none selected or invalid
+		// Find the nearest Friday expiration date first
 		now := time.Now()
-		var nearestExpiry time.Time
+		var nearestFridayExpiry time.Time
+		var nearestFridayExpiryStr string
+
 		for _, expDateStr := range allExpirationDates {
 			expiryTime, err := time.Parse("2006-01-02", expDateStr)
 			if err != nil {
@@ -264,18 +266,44 @@ func optionsHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			// Consider only future expirations
-			if expiryTime.After(now) {
-				if optionDataToUse == nil || expiryTime.Before(nearestExpiry) {
-					nearestExpiry = expiryTime
-					tempOptionData := yfTicker.OptionChainByExpiration(expDateStr)
-					optionDataToUse = &tempOptionData
-					expiryDateToUse = expiryTime
+			// Consider only future expirations that are Fridays
+			if expiryTime.After(now) && expiryTime.Weekday() == time.Friday {
+				if nearestFridayExpiry.IsZero() || expiryTime.Before(nearestFridayExpiry) {
+					nearestFridayExpiry = expiryTime
+					nearestFridayExpiryStr = expDateStr
 				}
 			}
 		}
-		if optionDataToUse != nil {
-			log.Printf("Using nearest expiration date %s for ticker %s", expiryDateToUse.Format("2006-01-02"), ticker)
+
+		if !nearestFridayExpiry.IsZero() {
+			// Use the nearest Friday expiry
+			tempOptionData := yfTicker.OptionChainByExpiration(nearestFridayExpiryStr)
+			optionDataToUse = &tempOptionData
+			expiryDateToUse = nearestFridayExpiry
+			log.Printf("Using nearest Friday expiration date %s for ticker %s", nearestFridayExpiryStr, ticker)
+		} else {
+			// Fallback to finding the overall nearest future expiration date if no Friday expiry is found
+			var nearestExpiry time.Time
+			for _, expDateStr := range allExpirationDates {
+				expiryTime, err := time.Parse("2006-01-02", expDateStr)
+				if err != nil {
+					log.Printf("Error parsing expiration date %s: %v", expDateStr, err)
+					continue
+				}
+
+				// Consider only future expirations
+				if expiryTime.After(now) {
+					if optionDataToUse == nil || expiryTime.Before(nearestExpiry) {
+						nearestExpiry = expiryTime
+						tempOptionData := yfTicker.OptionChainByExpiration(expDateStr)
+						optionDataToUse = &tempOptionData
+						expiryDateToUse = expiryTime
+					}
+				}
+			}
+			if optionDataToUse != nil {
+				log.Printf("Using nearest expiration date %s for ticker %s", expiryDateToUse.Format("2006-01-02"), ticker)
+			}
 		}
 	}
 
